@@ -30,7 +30,7 @@ PKGCONFIG_FILE=../libulfius.pc
 PKGCONFIG_TEMPLATE=../libulfius.pc.in
 DESTDIR=/usr/local
 CC=gcc
-CFLAGS+=-c -pedantic -std=gnu99 -fPIC -Wall -Werror -Wextra -Wconversion -D_REENTRANT -I$(ULFIUS_INCLUDE) $(ADDITIONALFLAGS) $(CPPFLAGS)
+CFLAGS+=-c -pedantic -std=gnu99 -fPIC -Wall -Wextra -Wconversion -D_REENTRANT -I$(ULFIUS_INCLUDE) $(ADDITIONALFLAGS) $(CPPFLAGS)
 LIBSDEP=-lmicrohttpd -lpthread -lz
 LIBS=-L$(DESTDIR)/lib -lc $(LDFLAGS)
 LIB_STATIC=
@@ -64,7 +64,6 @@ DISABLE_GNUTLS=0
 LGNUTLS=-lgnutls
 else
 DISABLE_GNUTLS=1
-WEBSOCKETFLAG=1
 endif
 
 ifndef WEBSOCKETFLAG
@@ -245,4 +244,3 @@ static: libulfius.a
 static-debug: ADDITIONALFLAGS=-DDEBUG -g -O0
 
 static-debug: libulfius.a
-

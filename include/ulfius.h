@@ -49,12 +49,8 @@ extern "C"
 #endif
 
 #ifndef U_DISABLE_WEBSOCKET
-  #include <poll.h>
   #include <zlib.h>
   #include <pthread.h>
-  #ifndef POLLRDHUP
-    #define POLLRDHUP 0x2000
-  #endif
 #endif
 
 #include <microhttpd.h>
@@ -1580,6 +1576,16 @@ struct _websocket_extension {
   void  * context;
 };
 
+/*
+  avoid include poll for FreeBASIC portability
+  so, define struct here
+*/
+struct pollfd_ {
+  int fd;
+  short events;
+  short revents;
+};
+
 /**
  * @struct _websocket_manager Websocket manager structure
  * contains among other things the socket
@@ -1598,16 +1604,18 @@ struct _websocket_manager {
   MHD_socket                       mhd_sock; /* !< reference to libmicrohttpd's socket for websocket server */
   int                              tcp_sock; /* !< tcp socket for websocket client */
   int                              tls; /* !< set to 1 if the websocket is in a TLS socket */
+#ifndef U_DISABLE_GNUTLS
   gnutls_session_t                 gnutls_session; /* !< GnuTLS session for websocket client */
   gnutls_certificate_credentials_t xcred; /* !< certificate credential used by GnuTLS */
+#endif
   char                           * protocol; /* !< websocket protocol */
   char                           * extensions; /* !< websocket extension */
   pthread_mutex_t                  read_lock; /* !< mutex to read data in the socket */
   pthread_mutex_t                  write_lock; /* !< mutex to write data in the socket */
   pthread_mutex_t                  status_lock; /* !< mutex to broadcast new status */
   pthread_cond_t                   status_cond; /* !< condition to broadcast new status */
-  struct pollfd                    fds_in;
-  struct pollfd                    fds_out;
+  struct pollfd_                   fds_in;
+  struct pollfd_                   fds_out;
   int                              type;
   int                              rsv_expected;
   struct _pointer_list           * websocket_extension_list;

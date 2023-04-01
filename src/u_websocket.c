@@ -23,6 +23,9 @@
  *
  */
 
+// FIXME remove this
+#define U_DISABLE_GNUTLS
+
 #if defined(__APPLE__) && !defined (MSG_NOSIGNAL)
   #define MSG_NOSIGNAL 0
 #endif
@@ -35,15 +38,22 @@
 
 #include <netinet/in.h>
 
+//#ifndef U_DISABLE_GNUTLS
 #include <gnutls/crypto.h>
+//#endif
 
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
+#include <poll.h>
+#ifndef POLLRDHUP
+  #define POLLRDHUP 0x2000
+#endif
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <zlib.h>
 
@@ -95,11 +105,13 @@ int ulfius_init_websocket_extension(struct _websocket_extension * websocket_exte
 static int is_websocket_data_available(struct _websocket_manager * websocket_manager) {
   int ret = 0, poll_ret = 0;
 
+#ifndef U_DISABLE_GNUTLS
   if (websocket_manager->tls) {
     ret = (int)gnutls_record_check_pending(websocket_manager->gnutls_session);
     if (ret)
       return ret;
   }
+#endif
   poll_ret = poll(&websocket_manager->fds_in, 1, U_WEBSOCKET_USEC_WAIT);
   if (poll_ret == -1) {
     y_log_message(Y_LOG_LEVEL_ERROR, "Ulfius - Error poll websocket read");
@@ -115,11 +127,13 @@ static int is_websocket_data_available(struct _websocket_manager * websocket_man
 static int is_websocket_write_available(struct _websocket_manager * websocket_manager) {
   int ret = 0, poll_ret = 0;
 
+#ifndef U_DISABLE_GNUTLS
   if (websocket_manager->tls) {
     ret = (int)gnutls_record_check_pending(websocket_manager->gnutls_session);
     if (ret)
       return ret;
   }
+#endif
   poll_ret = poll(&websocket_manager->fds_out, 1, U_WEBSOCKET_USEC_WAIT);
   if (poll_ret == -1) {
     y_log_message(Y_LOG_LEVEL_ERROR, "Ulfius - Error poll websocket write");
@@ -138,9 +152,12 @@ static ssize_t read_data_from_socket(struct _websocket_manager * websocket_manag
   if (len > 0) {
     do {
       if (is_websocket_data_available(websocket_manager)) {
+#ifndef U_DISABLE_GNUTLS
         if (websocket_manager->tls) {
           data_len = gnutls_record_recv(websocket_manager->gnutls_session, &data[ret], (len - (size_t)ret));
-        } else if (websocket_manager->type == U_WEBSOCKET_SERVER) {
+        } else
+#endif
+        if (websocket_manager->type == U_WEBSOCKET_SERVER) {
           data_len = read(websocket_manager->mhd_sock, &data[ret], (len - (size_t)ret));
         } else {
           data_len = read(websocket_manager->tcp_sock, &data[ret], (len - (size_t)ret));
@@ -174,9 +191,12 @@ static void ulfius_websocket_send_frame(struct _websocket_manager * websocket_ma
           break;
         }
       } else {
+#ifndef U_DISABLE_GNUTLS
         if (websocket_manager->tls) {
           ret = gnutls_record_send(websocket_manager->gnutls_session, &data[off], len - (size_t)off);
-        } else {
+        } else
+#endif
+        {
           ret = send(websocket_manager->tcp_sock, &data[off], len - (size_t)off, MSG_NOSIGNAL);
         }
         if (ret < 0) {
@@ -1073,6 +1093,7 @@ static int ulfius_open_websocket(struct _u_request * request, struct yuarel * y_
   return ret;
 }
 
+#ifndef U_DISABLE_GNUTLS
 /**
  * Opens a websocket connection to the specified server using a tls socket
  * Returns U_OK on success
@@ -1164,6 +1185,8 @@ static int ulfius_open_websocket_tls(struct _u_request * request, struct yuarel 
   }
   return ret;
 }
+
+#endif
 
 static void * u_zalloc(void * q, unsigned n, unsigned m) {
   (void)q;
@@ -1384,6 +1407,7 @@ int ulfius_check_first_match(const char * source, const char * match, const char
  */
 int ulfius_close_websocket(struct _websocket * websocket) {
   if (websocket != NULL && websocket->websocket_manager != NULL) {
+#ifndef U_DISABLE_GNUTLS
     if (websocket->websocket_manager->type == U_WEBSOCKET_CLIENT && websocket->websocket_manager->tls) {
       if (gnutls_bye(websocket->websocket_manager->gnutls_session, GNUTLS_SHUT_RDWR) != GNUTLS_E_SUCCESS) {
         y_log_message(Y_LOG_LEVEL_ERROR, "ulfius_close_websocket - Error gnutls_bye");
@@ -1392,6 +1416,7 @@ int ulfius_close_websocket(struct _websocket * websocket) {
       gnutls_certificate_free_credentials(websocket->websocket_manager->xcred);
       gnutls_global_deinit();
     }
+#endif
     if (websocket->websocket_manager->type == U_WEBSOCKET_CLIENT) {
       shutdown(websocket->websocket_manager->tcp_sock, SHUT_RDWR);
       close(websocket->websocket_manager->tcp_sock);
@@ -2598,7 +2623,9 @@ int ulfius_open_websocket_client_connection(struct _u_request * request,
               y_log_message(Y_LOG_LEVEL_ERROR, "Ulfius - Error ulfius_open_websocket");
               ulfius_clear_websocket(websocket);
             }
-          } else {
+          }
+#ifndef U_DISABLE_GNUTLS
+          else {
             websocket->websocket_manager->tls = 1;
             if (ulfius_open_websocket_tls(request, &y_url, websocket, response) != U_OK) {
               y_log_message(Y_LOG_LEVEL_ERROR, "Ulfius - Error ulfius_open_websocket_tls");
@@ -2608,6 +2635,7 @@ int ulfius_open_websocket_client_connection(struct _u_request * request,
               ret = U_OK;
             }
           }
+#endif
           if (ret == U_OK) {
             thread_ret_websocket = pthread_create(&thread_websocket, NULL, ulfius_thread_websocket, (void *)websocket);
             thread_detach_websocket = pthread_detach(thread_websocket);

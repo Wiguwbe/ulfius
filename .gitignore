@@ -33,3 +33,4 @@ tools/uwsc/valgrind.txt
 *.crt
 *.key
 doc/API.md
+.vscode
